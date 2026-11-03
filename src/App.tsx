@@ -227,7 +227,46 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
   const [positions, setPositions] = useState<Record<PetName, { x: number; y: number }>>(() => ({ mimi: { x: 24, y: Math.max(100, window.innerHeight - 132) }, puppy: { x: Math.max(150, window.innerWidth - 94), y: Math.max(100, window.innerHeight - 132) } }))
   const [dragging, setDragging] = useState<PetName | null>(null)
   const dragOffset = useRef({ x: 0, y: 0 })
+  const conversation = useRef<{ active: boolean; seeker: PetName | null; target: { x: number; y: number } | null }>({ active: false, seeker: null, target: null })
+  const conversationTimers = useRef<number[]>([])
   const sectionIds = ['top', 'world', 'gallery', 'surprises', 'wishes', 'letter', 'finale']
+  const getDialogue = (key: string): DialogueLine[] => {
+    const normalized = key === 'top' || key === 'hero' ? 'hero' : key
+    return (habeebaData.dialogue as Record<string, DialogueLine[]>)[normalized] || habeebaData.dialogue.hero
+  }
+  const showLine = (line: DialogueLine) => {
+    setActiveSpeaker(line.speaker)
+    setBubble(line.text)
+    setJumping(line.speaker)
+    setLineIndex((index) => index + 1)
+    if (line.speaker === 'together') onBurst()
+    window.setTimeout(() => setJumping(null), reducedMotion ? 1 : 700)
+  }
+  const clearConversationTimers = () => {
+    conversationTimers.current.forEach((timer) => window.clearTimeout(timer))
+    conversationTimers.current = []
+  }
+  const finishConversation = () => {
+    clearConversationTimers()
+    conversation.current = { active: false, seeker: null, target: null }
+    setPetStates({ mimi: 'idle', puppy: 'idle' })
+  }
+  const startFindingConversation = (seeker: PetName = 'puppy') => {
+    if (conversation.current.active || dragging) return
+    const targetName: PetName = seeker === 'mimi' ? 'puppy' : 'mimi'
+    const targetPosition = positions[targetName]
+    conversation.current = { active: true, seeker, target: { ...targetPosition } }
+    setPetStates({ [seeker]: 'looking-around', [targetName]: 'listening' } as Record<PetName, PetState>)
+    showLine({ speaker: seeker, text: seeker === 'puppy' ? 'MIMIIII, WHERE DID YOU GO?' : 'Puppyyyy, where are you?' })
+    conversationTimers.current.push(window.setTimeout(() => {
+      showLine({ speaker: targetName, text: targetName === 'mimi' ? "I'm right here silly! 💗" : 'I am right here, Mimi!' })
+      setPetStates((current) => ({ ...current, [targetName]: 'listening' }))
+    }, 1000))
+    conversationTimers.current.push(window.setTimeout(() => {
+      showLine({ speaker: seeker, text: seeker === 'puppy' ? "I'M COMINGGG!" : 'WAIT FOR MEEEE!' })
+      setPetStates((current) => ({ ...current, [seeker]: 'running' }))
+    }, 1900))
+  }
   useEffect(() => {
     const updateSection = () => {
       const current = sectionIds.reduce((found, id) => {
@@ -247,6 +286,7 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
   useEffect(() => {
     if (!visible || reducedMotion) return
     const timer = window.setInterval(() => {
+      if (conversation.current.active || dragging) return
       const lines = getDialogue(section)
       const next = lines[lineIndex % lines.length]
       showLine(next)
@@ -256,31 +296,22 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
   useEffect(() => {
     if (!visible || reducedMotion) return
     const timer = window.setInterval(() => {
+      if (conversation.current.active || dragging) return
       setPetStates((current) => ({
-        mimi: current.mimi === 'sleeping' ? 'waking' : (['idle', 'walking', 'sitting', 'sleeping', 'playing'][Math.floor(Math.random() * 5)] as PetState),
-        puppy: current.puppy === 'sleeping' ? 'waking' : (['idle', 'walking', 'running', 'jumping', 'playing'][Math.floor(Math.random() * 5)] as PetState),
+        mimi: current.mimi === 'sleeping' ? 'waking' : (['idle', 'sitting', 'playing'][Math.floor(Math.random() * 3)] as PetState),
+        puppy: current.puppy === 'sleeping' ? 'waking' : (['idle', 'running', 'playing'][Math.floor(Math.random() * 3)] as PetState),
       }))
     }, 6500)
     return () => window.clearInterval(timer)
-  }, [reducedMotion, visible])
+  }, [dragging, reducedMotion, visible])
   useEffect(() => {
     if (!visible || reducedMotion) return
-    const timer = window.setInterval(() => {
-      setPetStates((current) => ({ ...current, puppy: 'searching', mimi: 'looking-around' }))
-      showLine({ speaker: 'puppy', text: 'WHERE DID MY KITTY GO?!' })
-      const meetTimer = window.setTimeout(() => {
-        setPositions((current) => {
-          const meetX = Math.max(12, Math.min(window.innerWidth - 86, current.mimi.x + 42))
-          return { ...current, puppy: { x: meetX, y: current.mimi.y }, mimi: { x: Math.max(8, meetX - 44), y: current.mimi.y } }
-        })
-        setPetStates({ mimi: 'celebrating', puppy: 'celebrating' })
-        showLine({ speaker: 'together', text: 'Aww, we found each other! 💗' })
-        onBurst()
-      }, 2400)
-      window.setTimeout(() => window.clearTimeout(meetTimer), reducedMotion ? 1 : 7000)
-    }, 24000)
-    return () => window.clearInterval(timer)
-  }, [onBurst, reducedMotion, visible])
+    const timer = window.setInterval(() => startFindingConversation('puppy'), 24000)
+    return () => {
+      window.clearInterval(timer)
+      clearConversationTimers()
+    }
+  }, [dragging, reducedMotion, visible])
   useEffect(() => {
     if (!visible || reducedMotion) return
     let frame = 0
@@ -289,7 +320,29 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
         const next = { ...current }
         ;(['mimi', 'puppy'] as PetName[]).forEach((name) => {
           const state = petStates[name]
-          if (state !== 'walking' && state !== 'running' && state !== 'playing') return
+          if (conversation.current.active && conversation.current.seeker === name && conversation.current.target) {
+            const target = conversation.current.target
+            const dx = target.x - current[name].x
+            const dy = target.y - current[name].y
+            const distance = Math.hypot(dx, dy)
+            if (distance <= 48) {
+              next[name] = { x: Math.min(Math.max(8, target.x + (name === 'puppy' ? 44 : -44)), window.innerWidth - 72), y: target.y }
+              conversation.current.target = null
+              setPetStates({ mimi: 'celebrating', puppy: 'celebrating' })
+              showLine({ speaker: 'mimi', text: 'THERE YOU ARE!!' })
+              conversationTimers.current.push(window.setTimeout(() => showLine({ speaker: 'puppy', text: 'I FOUND YOUUU! 💗' }), reducedMotion ? 120 : 650))
+              conversationTimers.current.push(window.setTimeout(() => {
+                showLine({ speaker: 'together', text: 'YAYYY! BEST REUNION EVER! 💗' })
+                onBurst()
+              }, reducedMotion ? 240 : 1100))
+              conversationTimers.current.push(window.setTimeout(() => finishConversation(), reducedMotion ? 700 : 2100))
+            } else {
+              const speed = state === 'running' ? 3.2 : 2.2
+              next[name] = { x: Math.min(Math.max(8, current[name].x + (dx / distance) * speed), window.innerWidth - 72), y: Math.min(Math.max(70, current[name].y + (dy / distance) * speed), window.innerHeight - 82) }
+            }
+            return
+          }
+          if (conversation.current.active || state !== 'walking' && state !== 'running' && state !== 'playing') return
           const direction = name === 'mimi' ? 1 : -1
           next[name] = { x: Math.min(Math.max(8, current[name].x + direction * (state === 'running' ? 1.5 : .6)), window.innerWidth - 72), y: Math.min(current[name].y, window.innerHeight - 82) }
         })
@@ -302,26 +355,15 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
   }, [petStates, reducedMotion, visible])
   useEffect(() => {
     if (event.id === 0) return
+    if (conversation.current.active) return
     if (event.kind === 'gallery') showLine({ speaker: 'together', text: event.text || habeebaData.dialogue.galleryReactions[0] })
     if (event.kind === 'photo') showLine({ speaker: 'mimi', text: habeebaData.dialogue.galleryReactions[Math.floor(Math.random() * habeebaData.dialogue.galleryReactions.length)] })
   }, [event.id])
   useEffect(() => {
-    if (section !== 'gallery') return
+    if (section !== 'gallery' || conversation.current.active) return
     showLine({ speaker: 'together', text: habeebaData.dialogue.galleryReactions[Math.floor(Math.random() * habeebaData.dialogue.galleryReactions.length)] })
   }, [section])
   if (!visible) return <button className="companion-restore" onClick={onToggle}>Show Mimi &amp; Puppy</button>
-  const getDialogue = (key: string): DialogueLine[] => {
-    const normalized = key === 'top' || key === 'hero' ? 'hero' : key
-    return (habeebaData.dialogue as Record<string, DialogueLine[]>)[normalized] || habeebaData.dialogue.hero
-  }
-  const showLine = (line: DialogueLine) => {
-    setActiveSpeaker(line.speaker)
-    setBubble(line.text)
-    setJumping(line.speaker)
-    setLineIndex((index) => index + 1)
-    if (line.speaker === 'together') onBurst()
-    window.setTimeout(() => setJumping(null), reducedMotion ? 1 : 700)
-  }
   const clickCharacter = (speaker: 'mimi' | 'puppy') => {
     const options = habeebaData.dialogue.clicks[speaker]
     showLine({ speaker, text: options[Math.floor(Math.random() * options.length)] })
@@ -329,6 +371,8 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
   const clickTogether = () => showLine({ speaker: 'together', text: habeebaData.dialogue.clicks.together[Math.floor(Math.random() * habeebaData.dialogue.clicks.together.length)] })
   const beginDrag = (name: PetName, event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
+    clearConversationTimers()
+    conversation.current = { active: false, seeker: null, target: null }
     event.currentTarget.setPointerCapture(event.pointerId)
     dragOffset.current = { x: event.clientX - positions[name].x, y: event.clientY - positions[name].y }
     setDragging(name)
@@ -349,7 +393,12 @@ function CompanionSystem({ reducedMotion, visible, event, onToggle, onBurst }: {
       showLine({ speaker: 'together', text: 'Aww, we found each other! 💗' })
     }
   }
-  return <><button className={`companion companion-mimi pet-companion ${petStates.mimi} ${jumping === 'mimi' || jumping === 'together' ? 'companion-jump' : ''}`} style={{ left: positions.mimi.x, top: positions.mimi.y }} onPointerDown={(event) => beginDrag('mimi', event)} onPointerMove={(event) => moveDrag('mimi', event)} onPointerUp={() => endDrag('mimi')} onClick={() => { if (!dragging) clickCharacter('mimi') }} aria-label="Drag or talk to Mimi"><img src={habeebaData.finale.mimi.src} alt="Mimi the Kitty pixel-art companion" /><span>Mimi</span>{petStates.mimi === 'sleeping' && <i>Zzz</i>}</button><button className={`companion companion-puppy pet-companion ${petStates.puppy} ${jumping === 'puppy' || jumping === 'together' ? 'companion-jump' : ''}`} style={{ left: positions.puppy.x, top: positions.puppy.y }} onPointerDown={(event) => beginDrag('puppy', event)} onPointerMove={(event) => moveDrag('puppy', event)} onPointerUp={() => endDrag('puppy')} onClick={() => { if (!dragging) clickCharacter('puppy') }} aria-label="Drag or talk to Puppy"><img src={habeebaData.finale.puppy.src} alt="Puppy the pixel-art companion" /><span>Puppy</span>{petStates.puppy === 'sleeping' && <i>Zzz</i>}</button><aside className={`companions companion-owner-${activeSpeaker} ${reducedMotion ? 'still' : ''}`} aria-label="Mimi and Puppy birthday companions"><button className="companion-dismiss" onClick={onToggle} aria-label="Hide Mimi and Puppy">×</button><div className={`companion-bubble ${activeSpeaker}`}><strong>{activeSpeaker === 'mimi' ? 'MIMI' : activeSpeaker === 'puppy' ? 'PUPPY' : 'MIMI + PUPPY'}</strong><span>{bubble}</span></div><div className="companion-row"><button className={`companion companion-mimi ${jumping === 'mimi' || jumping === 'together' ? 'companion-jump' : ''}`} onClick={() => clickCharacter('mimi')} aria-label="Talk to Mimi"><img src={habeebaData.finale.mimi.src} alt="Mimi the Kitty pixel-art companion" /><span>Mimi</span></button><button className={`companion companion-puppy ${jumping === 'puppy' || jumping === 'together' ? 'companion-jump' : ''}`} onClick={() => clickCharacter('puppy')} aria-label="Talk to Puppy"><img src={habeebaData.finale.puppy.src} alt="Puppy pixel-art companion" /><span>Puppy</span></button><button className="companion-together" onClick={clickTogether} aria-label="Make Mimi and Puppy speak together">♡</button></div>  </aside></>
+  const speakerPosition = activeSpeaker === 'together'
+    ? { x: (positions.mimi.x + positions.puppy.x) / 2 + 31, y: Math.min(positions.mimi.y, positions.puppy.y) }
+    : activeSpeaker === 'mimi' ? positions.mimi : positions.puppy
+  const bubbleLeft = Math.min(Math.max(110, speakerPosition.x), Math.max(110, window.innerWidth - 110))
+  const bubbleTop = Math.max(10, speakerPosition.y - 86)
+  return <><button className={`companion companion-mimi pet-companion ${petStates.mimi} ${jumping === 'mimi' || jumping === 'together' ? 'companion-jump' : ''}`} style={{ left: positions.mimi.x, top: positions.mimi.y }} onPointerDown={(event) => beginDrag('mimi', event)} onPointerMove={(event) => moveDrag('mimi', event)} onPointerUp={() => endDrag('mimi')} onClick={() => { if (!dragging) clickCharacter('mimi') }} aria-label="Drag or talk to Mimi"><img src={habeebaData.finale.mimi.src} alt="Mimi the Kitty pixel-art companion" /><span>Mimi</span>{petStates.mimi === 'sleeping' && <i>Zzz</i>}</button><button className={`companion companion-puppy pet-companion ${petStates.puppy} ${jumping === 'puppy' || jumping === 'together' ? 'companion-jump' : ''}`} style={{ left: positions.puppy.x, top: positions.puppy.y }} onPointerDown={(event) => beginDrag('puppy', event)} onPointerMove={(event) => moveDrag('puppy', event)} onPointerUp={() => endDrag('puppy')} onClick={() => { if (!dragging) clickCharacter('puppy') }} aria-label="Drag or talk to Puppy"><img src={habeebaData.finale.puppy.src} alt="Puppy the pixel-art companion" /><span>Puppy</span>{petStates.puppy === 'sleeping' && <i>Zzz</i>}</button><div className={`companion-bubble ${activeSpeaker}`} style={{ left: bubbleLeft, top: bubbleTop }} aria-live="polite"><strong>{activeSpeaker === 'mimi' ? 'MIMI' : activeSpeaker === 'puppy' ? 'PUPPY' : 'MIMI + PUPPY'}</strong><span>{bubble}</span></div></>
   }
 
 function FinaleSection({ reducedMotion, onHeart }: { reducedMotion: boolean; onHeart: () => void }) {

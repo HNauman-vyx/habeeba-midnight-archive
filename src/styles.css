@@ -56,7 +56,7 @@ main, .top-nav, .world-footer { position: relative; z-index: 1; }
 
 .companions { position: fixed; z-index: 8; inset: auto; width: 0; height: 0; padding: 0; border: 0; background: transparent; box-shadow: none; pointer-events: none; }
 .companion-dismiss, .companion-together { display: none; }
-.companion-bubble { min-height: 0; width: min(205px, calc(100vw - 30px)); padding: 9px 11px; position: fixed; left: 50%; bottom: 156px; border: 1px solid rgba(81,35,52,.16); border-radius: 15px; color: #512334; background: rgba(255,255,255,.97); box-shadow: 0 8px 22px rgba(91,34,41,.16); pointer-events: none; transform: translateX(-50%) translateY(8px) scale(.94); opacity: 0; animation: companion-bubble-in .35s cubic-bezier(.2,.8,.25,1) forwards; }
+.companion-bubble { min-height: 0; width: min(205px, calc(100vw - 30px)); padding: 9px 11px; position: fixed; z-index: 10; border: 1px solid rgba(81,35,52,.16); border-radius: 15px; color: #512334; background: rgba(255,255,255,.97); box-shadow: 0 8px 22px rgba(91,34,41,.16); pointer-events: none; transform: translateX(-50%) translateY(8px) scale(.94); opacity: 0; animation: companion-bubble-in .35s cubic-bezier(.2,.8,.25,1) forwards; }
 .companion-owner-mimi .companion-bubble { left: 22vw; }
 .companion-owner-puppy .companion-bubble { left: auto; right: 22vw; }
 .companion-owner-together .companion-bubble { left: 50%; }
@@ -80,7 +80,7 @@ main, .top-nav, .world-footer { position: relative; z-index: 1; }
 @keyframes pet-search { 50% { transform: translateX(5px) rotate(3deg); } } @keyframes pet-look { 50% { transform: rotate(-5deg) translateY(-2px); } } @keyframes pet-celebrate { 50% { transform: translateY(-16px) rotate(5deg) scale(1.06); } }
 @media (max-width: 520px) { .companions { right: 9px; bottom: max(9px, env(safe-area-inset-bottom)); width: min(270px, calc(100vw - 18px)); }.companion img { width: 46px; height: 58px; }.companion { min-width: 65px; }.companion-bubble span { font-size: 10px; } }
 @media (max-width: 520px) { .pet-companion { width: 62px; }.pet-companion img { width: 46px; height: 58px; }.pet-companion span { font-size: 8px; } }
-@media (max-width: 520px) { .companion-bubble { width: min(190px, calc(100vw - 28px)); bottom: 116px; font-size: 10px; }.companion-owner-mimi .companion-bubble { left: 28vw; }.companion-owner-puppy .companion-bubble { right: 28vw; } }
+@media (max-width: 520px) { .companion-bubble { width: min(190px, calc(100vw - 28px)); font-size: 10px; } }
 @media (prefers-reduced-motion: reduce) { .companions { animation: none; }.companion-jump { animation: none; }.companion-restore { transition: none; } }
 
 .opening-content, .opening-flowers, .opening-scroll { z-index: 4; }
