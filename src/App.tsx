@@ -15,7 +15,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { habeebaData, Photo, Surprise } from './habeebaData'
+import { habeebaData, DialogueLine, Photo, Surprise } from './habeebaData'
 
 const STORAGE_KEY = 'habeeba-world-progress'
 
@@ -58,6 +58,7 @@ export function App() {
   const [cakeLit, setCakeLit] = useState(true)
   const [heartBurst, setHeartBurst] = useState(0)
   const [reducedMotion, setReducedMotion] = useState(false)
+  const [companionVisible, setCompanionVisible] = useState(true)
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)), [progress])
   useEffect(() => {
@@ -86,12 +87,16 @@ export function App() {
     setHeartBurst((count) => count + 1)
     setProgress((current) => current.surprises.includes(surprise.id) ? current : { ...current, surprises: [...current.surprises, surprise.id] })
   }
+  const triggerCelebration = () => setHeartBurst((count) => count + 1)
 
   return (
     <div className={`world ${reducedMotion ? 'reduced-motion' : ''}`}>
-      <Fireworks active reducedMotion={reducedMotion} />
+      <Fireworks active reducedMotion={reducedMotion} burstKey={heartBurst} />
       {!progress.entered ? (
-        <Opening birthdayStarted={birthdayStarted} time={time} onEnter={enter} />
+        <>
+          <Opening birthdayStarted={birthdayStarted} time={time} onEnter={enter} />
+          <CompanionSystem reducedMotion={reducedMotion} visible={companionVisible} onToggle={() => setCompanionVisible((current) => !current)} onBurst={triggerCelebration} />
+        </>
       ) : (
         <>
           <TopNav />
@@ -102,9 +107,10 @@ export function App() {
             <SurpriseSection cakeLit={cakeLit} cakeComplete={progress.cakeComplete} surprises={progress.surprises} onCake={completeCake} onSurprise={openSurprise} />
             <WishesSection />
             <LetterSection />
-            <FinaleSection reducedMotion={reducedMotion} onHeart={() => setHeartBurst((count) => count + 1)} />
+            <FinaleSection reducedMotion={reducedMotion} onHeart={triggerCelebration} />
           </main>
           <Footer />
+          <CompanionSystem reducedMotion={reducedMotion} visible={companionVisible} onToggle={() => setCompanionVisible((current) => !current)} onBurst={triggerCelebration} />
         </>
       )}
       {activePhoto && <PhotoLightbox photo={activePhoto} onClose={() => setActivePhoto(null)} />}
@@ -162,7 +168,7 @@ function SurpriseSection({ cakeLit, cakeComplete, surprises, onCake, onSurprise 
 }
 
 function WishesSection() {
-  return <section className="wishes-section section-wrap"><div className="wishes-burst">✹</div><div className="section-heading centered"><span className="eyebrow pink">05 / A WORLD OF WISHES</span><h2>For her next<br /><em>beautiful chapter.</em></h2></div><div className="wish-list">{habeebaData.wishes.map((wish, index) => <div className="wish" key={wish}><span>0{index + 1}</span><p>{wish}</p><Sparkles size={18} /></div>)}</div></section>
+  return <section className="wishes-section section-wrap" id="wishes"><div className="wishes-burst">✹</div><div className="section-heading centered"><span className="eyebrow pink">05 / A WORLD OF WISHES</span><h2>For her next<br /><em>beautiful chapter.</em></h2></div><div className="wish-list">{habeebaData.wishes.map((wish, index) => <div className="wish" key={wish}><span>0{index + 1}</span><p>{wish}</p><Sparkles size={18} /></div>)}</div></section>
 }
 
 function LetterSection() {
@@ -193,8 +199,61 @@ function SurpriseModal({ surprise, onClose }: { surprise: Surprise; onClose: () 
 }
 
 function CelebrationDetails({ reducedMotion, burstKey }: { reducedMotion: boolean; burstKey: number }) {
-  const petals = Array.from({ length: 22 }, (_, index) => index)
+  const petals = Array.from({ length: 34 }, (_, index) => index)
   return <><div className="petal-layer" aria-hidden="true">{!reducedMotion && petals.map((petal) => <span key={petal} className={`petal petal-${petal % 6}`} style={{ '--petal-left': `${(petal * 43) % 103}%`, '--petal-delay': `${(petal % 9) * -1.7}s`, '--petal-duration': `${8 + (petal % 6)}s` } as CSSProperties}>{petal % 4 === 0 ? '✿' : petal % 3 === 0 ? '❀' : '♡'}</span>)}</div><div className={`heart-burst-layer ${burstKey ? 'burst-active' : ''}`} key={burstKey} aria-hidden="true">{burstKey > 0 && Array.from({ length: 16 }, (_, index) => <span key={index} style={{ '--burst-angle': `${index * 22.5}deg`, '--burst-distance': `${55 + (index % 4) * 18}px` } as CSSProperties}>♥</span>)}</div></>
+}
+
+function CompanionSystem({ reducedMotion, visible, onToggle, onBurst }: { reducedMotion: boolean; visible: boolean; onToggle: () => void; onBurst: () => void }) {
+  const [section, setSection] = useState('hero')
+  const [lineIndex, setLineIndex] = useState(0)
+  const [activeSpeaker, setActiveSpeaker] = useState<'mimi' | 'puppy' | 'together'>(habeebaData.dialogue.hero[0].speaker)
+  const [bubble, setBubble] = useState(habeebaData.dialogue.hero[0].text)
+  const [jumping, setJumping] = useState<'mimi' | 'puppy' | 'together' | null>(null)
+  const sectionIds = ['top', 'world', 'gallery', 'surprises', 'wishes', 'letter', 'finale']
+  useEffect(() => {
+    const updateSection = () => {
+      const current = sectionIds.reduce((found, id) => {
+        const node = document.getElementById(id)
+        if (!node || window.scrollY + window.innerHeight * .42 < node.offsetTop) return found
+        return id
+      }, 'hero')
+      if (current !== section) {
+        setSection(current)
+        setLineIndex(0)
+      }
+    }
+    updateSection()
+    window.addEventListener('scroll', updateSection, { passive: true })
+    return () => window.removeEventListener('scroll', updateSection)
+  }, [section])
+  useEffect(() => {
+    if (!visible || reducedMotion) return
+    const timer = window.setInterval(() => {
+      const lines = getDialogue(section)
+      const next = lines[lineIndex % lines.length]
+      showLine(next)
+    }, 12000)
+    return () => window.clearInterval(timer)
+  }, [lineIndex, reducedMotion, section, visible])
+  if (!visible) return <button className="companion-restore" onClick={onToggle}>Show Mimi &amp; Puppy</button>
+  const getDialogue = (key: string): DialogueLine[] => {
+    const normalized = key === 'top' || key === 'hero' ? 'hero' : key
+    return (habeebaData.dialogue as Record<string, DialogueLine[]>)[normalized] || habeebaData.dialogue.hero
+  }
+  const showLine = (line: DialogueLine) => {
+    setActiveSpeaker(line.speaker)
+    setBubble(line.text)
+    setJumping(line.speaker)
+    setLineIndex((index) => index + 1)
+    if (line.speaker === 'together') onBurst()
+    window.setTimeout(() => setJumping(null), reducedMotion ? 1 : 700)
+  }
+  const clickCharacter = (speaker: 'mimi' | 'puppy') => {
+    const options = habeebaData.dialogue.clicks[speaker]
+    showLine({ speaker, text: options[Math.floor(Math.random() * options.length)] })
+  }
+  const clickTogether = () => showLine({ speaker: 'together', text: habeebaData.dialogue.clicks.together[Math.floor(Math.random() * habeebaData.dialogue.clicks.together.length)] })
+  return <aside className={`companions ${reducedMotion ? 'still' : ''}`} aria-label="Mimi and Puppy birthday companions"><button className="companion-dismiss" onClick={onToggle} aria-label="Hide Mimi and Puppy">×</button><div className={`companion-bubble ${activeSpeaker}`}><strong>{activeSpeaker === 'mimi' ? 'MIMI' : activeSpeaker === 'puppy' ? 'PUPPY' : 'MIMI + PUPPY'}</strong><span>{bubble}</span></div><div className="companion-row"><button className={`companion companion-mimi ${jumping === 'mimi' || jumping === 'together' ? 'companion-jump' : ''}`} onClick={() => clickCharacter('mimi')} aria-label="Talk to Mimi"><img src={habeebaData.finale.mimi.src} alt="Mimi the Kitty pixel-art companion" /><span>Mimi</span></button><button className={`companion companion-puppy ${jumping === 'puppy' || jumping === 'together' ? 'companion-jump' : ''}`} onClick={() => clickCharacter('puppy')} aria-label="Talk to Puppy"><img src={habeebaData.finale.puppy.src} alt="Puppy pixel-art companion" /><span>Puppy</span></button><button className="companion-together" onClick={clickTogether} aria-label="Make Mimi and Puppy speak together">♡</button></div></aside>
 }
 
 function FinaleSection({ reducedMotion, onHeart }: { reducedMotion: boolean; onHeart: () => void }) {
@@ -211,22 +270,24 @@ function FinaleSection({ reducedMotion, onHeart }: { reducedMotion: boolean; onH
   const speak = () => {
     if (!('speechSynthesis' in window)) return
     window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(habeebaData.finale.spokenWish)
-    utterance.rate = .94
-    utterance.pitch = 1.08
-    utterance.onstart = () => setSpoken(true)
-    utterance.onend = () => setSpoken(false)
-    window.speechSynthesis.speak(utterance)
+    setSpoken(true)
+    habeebaData.finale.spokenSegments.forEach((segment, index) => {
+      const utterance = new SpeechSynthesisUtterance(segment.text)
+      utterance.rate = .94
+      utterance.pitch = segment.speaker === 'Mimi' ? 1.12 : 1.04
+      utterance.onend = () => { if (index === habeebaData.finale.spokenSegments.length - 1) setSpoken(false) }
+      window.speechSynthesis.speak(utterance)
+    })
     onHeart()
   }
-  return <section ref={finaleRef} className={`finale-section ${visible ? 'finale-visible' : ''}`} id="finale"><div className="finale-firework finale-firework-a">✹</div><div className="finale-firework finale-firework-b">✦</div><div className="finale-heading"><span className="eyebrow">THE GRAND FINALE</span><h2>One more little<br /><em>surprise.</em></h2></div><div className="character-stage"><Character character={habeebaData.finale.mimi} className="mimi" reducedMotion={reducedMotion} /><div className="finale-speech"><span>{habeebaData.finale.speech}</span><button onClick={speak} className="speech-button">{spoken ? 'OUR WISH IS PLAYING ✦' : 'HEAR OUR BIRTHDAY WISH'}<Volume2 size={16} /></button></div><Character character={habeebaData.finale.puppy} className="puppy" reducedMotion={reducedMotion} /></div><p className="finale-note">Mimi and Puppy are the original pixel-art characters from the uploaded reference image.</p></section>
+  return <section ref={finaleRef} className={`finale-section ${visible ? 'finale-visible' : ''}`} id="finale"><div className="finale-firework finale-firework-a">✹</div><div className="finale-firework finale-firework-b">✦</div><div className="finale-heading"><span className="eyebrow">THE GRAND FINALE</span><h2>One more little<br /><em>surprise.</em></h2><p className="finale-subtitle">THIS WHOLE DAY IS YOURS! 💗</p></div><div className="character-stage"><Character character={habeebaData.finale.mimi} className="mimi" reducedMotion={reducedMotion} /><div className="finale-speech"><span>HAPPY BIRTHDAY HABEEBAAAAA!! 🎂💗</span><button onClick={speak} className="speech-button">{spoken ? 'OUR WISH IS PLAYING ✦' : 'HEAR OUR BIRTHDAY WISH ❤️'}<Volume2 size={16} /></button></div><Character character={habeebaData.finale.puppy} className="puppy" reducedMotion={reducedMotion} /></div><p className="finale-note">Mimi and Puppy are the original pixel-art characters from the uploaded reference image.</p></section>
 }
 
 function Character({ character, className, reducedMotion }: { character: { name: string; src: string; alt: string }; className: string; reducedMotion: boolean }) {
   return <div className={`character ${className} ${reducedMotion ? 'still' : ''}`}>{character.src ? <img className="pixel-character" src={character.src} alt={character.alt} draggable="false" /> : <div className="character-placeholder"><Camera size={23} /><strong>{character.name}</strong><small>ADD REFERENCE IMAGE</small></div>}<span className="character-bubble">{character.bubble}</span><span className="character-name">{character.name}</span></div>
 }
 
-function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: boolean }) {
+function Fireworks({ active, reducedMotion, burstKey }: { active: boolean; reducedMotion: boolean; burstKey: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -237,7 +298,8 @@ function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: 
     let animation = 0
     let width = 0
     let height = 0
-    const bursts: { x: number; y: number; age: number; color: string }[] = []
+    const bursts: { x: number; y: number; age: number; color: string; size: number; pattern: number }[] = []
+    let lastBurstKey = burstKey
     const resize = () => {
       width = canvas.width = window.innerWidth * window.devicePixelRatio
       height = canvas.height = window.innerHeight * window.devicePixelRatio
@@ -250,21 +312,35 @@ function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: 
     const colors = ['#ff7438', '#ffb52e', '#f78fb3', '#f15b4e', '#ffd86b']
     const draw = () => {
       frame += 1
-      context.fillStyle = active ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.22)'
+      if (document.hidden) {
+        animation = window.requestAnimationFrame(draw)
+        return
+      }
+      context.fillStyle = active ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.14)'
       context.clearRect(0, 0, width, height)
-      if (frame % (active ? 42 : 75) === 0) bursts.push({ x: Math.random() * width, y: 80 + Math.random() * height * .42, age: 0, color: colors[Math.floor(Math.random() * colors.length)] })
+      if (frame % (active ? 28 : 45) === 0) bursts.push({ x: 30 + Math.random() * Math.max(1, width - 60), y: 70 + Math.random() * height * .48, age: 0, color: colors[Math.floor(Math.random() * colors.length)], size: active ? 2.2 + Math.random() * 2.8 : 1.4 + Math.random() * 2, pattern: Math.floor(Math.random() * 3) })
+      if (burstKey !== lastBurstKey) {
+        lastBurstKey = burstKey
+        for (let i = 0; i < (active ? 4 : 2); i += 1) bursts.push({ x: width * (.18 + Math.random() * .64), y: height * (.15 + Math.random() * .35), age: 0, color: colors[(i + burstKey) % colors.length], size: 3.2, pattern: i % 3 })
+      }
       bursts.forEach((burst) => {
         burst.age += 1
-        context.globalAlpha = Math.max(0, 1 - burst.age / 70)
-        for (let i = 0; i < 22; i += 1) {
-          const angle = (Math.PI * 2 * i) / 22
-          const distance = burst.age * (1.2 + (i % 3) * .17)
+        context.globalAlpha = Math.max(0, 1 - burst.age / (active ? 95 : 75))
+        context.shadowBlur = 12
+        context.shadowColor = burst.color
+        const particleCount = burst.pattern === 0 ? 34 : 24
+        for (let i = 0; i < particleCount; i += 1) {
+          const angle = (Math.PI * 2 * i) / particleCount
+          const distance = burst.age * (burst.size + (i % 3) * .28)
           context.fillStyle = burst.color
-          context.fillRect(burst.x + Math.cos(angle) * distance, burst.y + Math.sin(angle) * distance, 2, 2)
+          const particleSize = burst.pattern === 2 && i % 2 === 0 ? 4 : 2.5
+          context.fillRect(burst.x + Math.cos(angle) * distance, burst.y + Math.sin(angle) * distance, particleSize, particleSize)
         }
+        context.shadowBlur = 0
       })
+      for (let i = bursts.length - 1; i >= 0; i -= 1) if (bursts[i].age > (active ? 95 : 75)) bursts.splice(i, 1)
       context.globalAlpha = 1
-      for (let i = 0; i < 35; i += 1) {
+      for (let i = 0; i < (active ? 80 : 45); i += 1) {
         const x = (i * 97 + frame * .18) % width
         const y = (i * 47 + frame * .08) % (height * .8)
         context.fillStyle = colors[i % colors.length]
@@ -276,6 +352,6 @@ function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: 
     window.addEventListener('resize', resize)
     animation = window.requestAnimationFrame(draw)
     return () => { window.cancelAnimationFrame(animation); window.removeEventListener('resize', resize) }
-  }, [active, reducedMotion])
+  }, [active, burstKey, reducedMotion])
   return <canvas className={`fireworks ${active ? 'celebration-fireworks' : ''}`} ref={canvasRef} aria-hidden="true" />
 }

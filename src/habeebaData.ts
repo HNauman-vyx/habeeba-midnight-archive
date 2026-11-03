@@ -14,6 +14,11 @@ export type Surprise = {
   color: 'orange' | 'pink' | 'gold' | 'coral'
 }
 
+export type DialogueLine = {
+  speaker: 'mimi' | 'puppy' | 'together'
+  text: string
+}
+
 export const habeebaData = {
   /**
    * PERSONALISATION GUIDE
@@ -100,6 +105,44 @@ export const habeebaData = {
     },
     referenceSheet: '/images/mimi-puppy-reference.png',
     speech: 'HAPPY BIRTHDAY HABEEBA!! 🎂💗',
-    spokenWish: 'Happy birthday, Habeeba! We hope your day is filled with happiness, laughter, beautiful surprises and lots and lots of love! We love celebrating you!',
+    spokenWish: 'Happy birthday, Habeeba! We have been waiting all day to celebrate you! We hope your birthday is filled with beautiful surprises, happiness, laughter and everything your heart wishes for! Keep smiling, keep shining and never forget how special you are! Happy birthday Habeeba! We love you!',
+    spokenSegments: [
+      { speaker: 'Puppy', text: 'Happy birthday, Habeeba! We have been waiting all day to celebrate you!' },
+      { speaker: 'Mimi', text: 'We hope your birthday is filled with beautiful surprises, happiness, laughter and everything your heart wishes for!' },
+      { speaker: 'Puppy', text: 'Keep smiling, keep shining and never forget how special you are!' },
+      { speaker: 'Mimi and Puppy', text: 'Happy birthday Habeeba! We love you!' },
+    ],
+  },
+  dialogue: {
+    hero: [
+      { speaker: 'puppy', text: "Mimi! Today's the BIG day!" },
+      { speaker: 'mimi', text: "HABEEBA'S BIRTHDAYYYYY!" },
+      { speaker: 'together', text: 'Quick! Get the fireworks ready!!' },
+    ],
+    world: [
+      { speaker: 'mimi', text: "Let's remind her how special she is." },
+      { speaker: 'puppy', text: 'She deserves to hear it every day!' },
+    ],
+    gallery: [
+      { speaker: 'puppy', text: 'Look at these lovely pictures!' },
+      { speaker: 'mimi', text: 'I want to see all of them!' },
+    ],
+    surprises: [
+      { speaker: 'mimi', text: 'PRESENT TIME!' },
+      { speaker: 'puppy', text: 'I wonder what is inside!' },
+    ],
+    wishes: [
+      { speaker: 'mimi', text: 'She deserves so many beautiful things!' },
+      { speaker: 'puppy', text: 'Especially happiness and lots of treats!' },
+    ],
+    letter: [
+      { speaker: 'puppy', text: 'We have one more special message.' },
+      { speaker: 'mimi', text: "Let's make this one count." },
+    ],
+    clicks: {
+      mimi: ['You are absolutely wonderful, Habeeba! 💗', 'Mimi approves this birthday energy! ✨', 'Keep shining, birthday star!'],
+      puppy: ['Birthday hugs incoming! 🎂', 'You deserve the biggest celebration!', 'Puppy says: more cake, more joy!'],
+      together: ['HAPPY BIRTHDAY HABEEBA!! 💗', 'We love celebrating you!', 'Best birthday ever, right now!'],
+    },
   },
 }
