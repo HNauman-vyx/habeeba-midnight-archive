@@ -1,381 +1,244 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  Archive,
-  ArrowLeft,
-  BatteryCharging,
-  Bell,
-  BookHeart,
-  ChevronRight,
-  CircleHelp,
-  Clock3,
-  Disc3,
-  Edit3,
-  Headphones,
-  Home,
-  LockKeyhole,
-  Menu,
-  Moon,
-  Pause,
+  ArrowDown,
+  ArrowRight,
+  CakeSlice,
+  Camera,
+  Check,
+  Gift,
+  Heart,
+  ImageOff,
+  PartyPopper,
   Play,
-  Radio,
-  RotateCcw,
-  Save,
   Sparkles,
-  Star,
-  TimerReset,
-  Unlock,
   Volume2,
   X,
 } from 'lucide-react'
-import { AppId, DataItem, habeebaData } from './habeebaData'
+import { habeebaData, Photo, Surprise } from './habeebaData'
 
-type PersistedState = {
-  unlocked: boolean
-  preview: boolean
-  opened: AppId[]
-  activeApp: AppId | null
-  readItems: string[]
-  capsuleStep: number
-  volume: number
-  vaultDraft: string
+const STORAGE_KEY = 'habeeba-world-progress'
+
+type Progress = {
+  entered: boolean
+  cakeComplete: boolean
+  surprises: string[]
 }
 
-const STORAGE_KEY = 'habeeba-midnight-archive-state'
+const defaultProgress: Progress = { entered: false, cakeComplete: false, surprises: [] }
 
-const apps: { id: AppId; label: string; caption: string; icon: typeof Radio; tone: string }[] = [
-  { id: 'distance', label: 'Distance FM', caption: 'signal / 01', icon: Radio, tone: 'violet' },
-  { id: 'transmission', label: 'Transmission', caption: 'letter / 02', icon: Sparkles, tone: 'rose' },
-  { id: 'constellation', label: 'Her Constellation', caption: 'stars / 03', icon: Star, tone: 'blue' },
-  { id: 'vault', label: '0411 Vault', caption: 'locked / 04', icon: Archive, tone: 'amber' },
-  { id: 'capsule', label: 'Time Capsule', caption: 'future / 05', icon: TimerReset, tone: 'mint' },
-]
-
-const defaultState: PersistedState = {
-  unlocked: false,
-  preview: false,
-  opened: [],
-  activeApp: null,
-  readItems: [],
-  capsuleStep: 0,
-  volume: 0.65,
-  vaultDraft: habeebaData.vault[0].body,
-}
-
-function readState(): PersistedState {
+function readProgress(): Progress {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') as Partial<PersistedState> | null
-    return {
-      ...defaultState,
-      ...parsed,
-      opened: parsed?.opened || [],
-      readItems: parsed?.readItems || [],
-      vaultDraft: parsed?.vaultDraft ?? defaultState.vaultDraft,
-    }
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') as Partial<Progress> | null
+    return { ...defaultProgress, ...saved, surprises: saved?.surprises || [] }
   } catch {
-    return defaultState
+    return defaultProgress
   }
 }
 
-function getTargetDate(): number {
-  // Asia/Kolkata is UTC+05:30 and does not observe daylight saving time.
+function getBirthdayTarget() {
   return Date.parse(`${habeebaData.birthday.year}-${String(habeebaData.birthday.month).padStart(2, '0')}-${String(habeebaData.birthday.day).padStart(2, '0')}T18:30:00.000Z`)
 }
 
-function formatTime(ms: number): { days: number; hours: number; mins: number; secs: number } {
+function countdown(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
   return {
     days: Math.floor(total / 86400),
     hours: Math.floor((total % 86400) / 3600),
-    mins: Math.floor((total % 3600) / 60),
-    secs: total % 60,
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
   }
 }
 
-function formatClock(timeZone: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date())
-}
-
 export function App() {
-  const [state, setState] = useState<PersistedState>(readState)
-  const [booting, setBooting] = useState(true)
+  const [progress, setProgress] = useState<Progress>(readProgress)
   const [now, setNow] = useState(Date.now())
-  const [shadeOpen, setShadeOpen] = useState(false)
-  const [managerOpen, setManagerOpen] = useState(false)
-  const [toast, setToast] = useState('')
+  const [activePhoto, setActivePhoto] = useState<Photo | null>(null)
+  const [activeSurprise, setActiveSurprise] = useState<Surprise | null>(null)
+  const [cakeLit, setCakeLit] = useState(true)
+  const [celebrating, setCelebrating] = useState(false)
   const [reducedMotion, setReducedMotion] = useState(false)
-  const uiRef = useRef<{ shadeOpen: boolean; managerOpen: boolean; activeApp: AppId | null }>({ shadeOpen: false, managerOpen: false, activeApp: null })
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
-
-  uiRef.current = { shadeOpen, managerOpen, activeApp: state.activeApp }
-
+  useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)), [progress])
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setBooting(false), 520)
-    return () => window.clearTimeout(timer)
-  }, [])
-
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const onChange = () => setReducedMotion(media.matches)
-    onChange()
-    media.addEventListener?.('change', onChange)
-    return () => media.removeEventListener?.('change', onChange)
+    const update = () => setReducedMotion(media.matches)
+    update()
+    media.addEventListener?.('change', update)
+    return () => media.removeEventListener?.('change', update)
   }, [])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        if (shadeOpen) setShadeOpen(false)
-        else if (managerOpen) setManagerOpen(false)
-        else if (state.activeApp) setState((s) => ({ ...s, activeApp: null }))
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [managerOpen, shadeOpen, state.activeApp])
-
-  useEffect(() => {
-    if (!state.unlocked) return
-    window.history.pushState({ habeebaOs: true }, '')
-    const onPopState = () => {
-      if (uiRef.current.shadeOpen) setShadeOpen(false)
-      else if (uiRef.current.managerOpen) setManagerOpen(false)
-      else if (uiRef.current.activeApp) setState((s) => ({ ...s, activeApp: null }))
-      window.history.pushState({ habeebaOs: true }, '')
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [state.unlocked])
-
-  const remaining = formatTime(getTargetDate() - now)
-  const birthdayStarted = getTargetDate() <= now
-
-  const update = useCallback((patch: Partial<PersistedState>) => setState((current) => ({ ...current, ...patch })), [])
-  const notify = useCallback((message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(''), 2600)
-  }, [])
-
-  const openApp = (id: AppId) => {
-    update({ activeApp: id, opened: state.opened.includes(id) ? state.opened : [...state.opened, id] })
-    setShadeOpen(false)
-    setManagerOpen(false)
+  const birthdayStarted = now >= getBirthdayTarget()
+  const time = countdown(getBirthdayTarget() - now)
+  const enter = () => setProgress((current) => ({ ...current, entered: true }))
+  const completeCake = () => {
+    if (progress.cakeComplete) return
+    setCakeLit(false)
+    setCelebrating(true)
+    setProgress((current) => ({ ...current, cakeComplete: true }))
+    window.setTimeout(() => setCelebrating(false), 4200)
   }
-
-  const closeApp = () => update({ activeApp: null })
-  const markRead = (id: string) => update({ readItems: state.readItems.includes(id) ? state.readItems : [...state.readItems, id] })
-  const reset = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    setState(defaultState)
-    setShadeOpen(false)
-    setManagerOpen(false)
-    notify('Archive reset')
+  const openSurprise = (surprise: Surprise) => {
+    setActiveSurprise(surprise)
+    setProgress((current) => current.surprises.includes(surprise.id) ? current : { ...current, surprises: [...current.surprises, surprise.id] })
   }
 
   return (
-    <div className={`os-shell ${reducedMotion ? 'reduced-motion' : ''}`}>
-      {booting ? <BootScreen /> : !state.unlocked ? (
-        <LockScreen
-          now={now}
-          remaining={remaining}
-          birthdayStarted={birthdayStarted}
-          preview={state.preview}
-          onUnlock={() => update({ unlocked: true })}
-          onPreview={() => update({ preview: true, unlocked: true })}
-        />
+    <div className={`world ${reducedMotion ? 'reduced-motion' : ''}`}>
+      <Fireworks active reducedMotion={reducedMotion} />
+      {!progress.entered ? (
+        <Opening birthdayStarted={birthdayStarted} time={time} onEnter={enter} />
       ) : (
-        <div className="phone-stage">
-          <StatusBar now={now} onShade={() => setShadeOpen(true)} />
-          <main className="screen-content">
-            {state.activeApp ? (
-              <AppWindow
-                appId={state.activeApp}
-                state={state}
-                remaining={remaining}
-                onBack={closeApp}
-                onRead={markRead}
-                onCapsuleStep={(step) => update({ capsuleStep: step })}
-                vaultDraft={state.vaultDraft}
-                onVaultDraft={(vaultDraft) => update({ vaultDraft })}
-                volume={state.volume}
-                onVolume={(volume) => update({ volume })}
-                notify={notify}
-              />
-            ) : (
-              <Launcher
-                remaining={remaining}
-                birthdayStarted={birthdayStarted}
-                opened={state.opened}
-                onOpen={openApp}
-                onManager={() => setManagerOpen(true)}
-              />
-            )}
+        <>
+          <TopNav />
+          <main>
+            <Hero birthdayStarted={birthdayStarted} time={time} onCake={() => document.getElementById('surprises')?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })} />
+            <WorldSection />
+            <Gallery onSelect={setActivePhoto} />
+            <SurpriseSection cakeLit={cakeLit} cakeComplete={progress.cakeComplete} surprises={progress.surprises} onCake={completeCake} onSurprise={openSurprise} />
+            <WishesSection />
+            <LetterSection />
           </main>
-          <NavigationDock activeApp={state.activeApp} onHome={closeApp} onManager={() => setManagerOpen(true)} onShade={() => setShadeOpen(true)} />
-          {shadeOpen && <NotificationShade remaining={remaining} onClose={() => setShadeOpen(false)} onOpen={openApp} onReset={reset} preview={state.preview} />}
-          {managerOpen && <AppManager opened={state.opened} activeApp={state.activeApp} onClose={() => setManagerOpen(false)} onOpen={openApp} onReset={reset} />}
-          {toast && <div className="toast">{toast}</div>}
-        </div>
+          <Footer />
+        </>
       )}
+      {activePhoto && <PhotoLightbox photo={activePhoto} onClose={() => setActivePhoto(null)} />}
+      {activeSurprise && <SurpriseModal surprise={activeSurprise} onClose={() => setActiveSurprise(null)} />}
     </div>
   )
 }
 
-function BootScreen() {
-  return <div className="boot-screen"><div className="boot-mark"><Sparkles size={24} /></div><span className="eyebrow">HABEEBA // OS</span><strong>THE MIDNIGHT ARCHIVE</strong><small>loading private frequency...</small></div>
-}
-
-function LockScreen({ now, remaining, birthdayStarted, preview, onUnlock, onPreview }: { now: number; remaining: ReturnType<typeof formatTime>; birthdayStarted: boolean; preview: boolean; onUnlock: () => void; onPreview: () => void }) {
-  const date = new Intl.DateTimeFormat('en-IN', { weekday: 'long', month: 'long', day: 'numeric' }).format(now)
+function Opening({ birthdayStarted, time, onEnter }: { birthdayStarted: boolean; time: ReturnType<typeof countdown>; onEnter: () => void }) {
   return (
-    <div className="lock-screen">
-      <div className="grain" />
-      <div className="lock-topline"><span>HABEEBA // OS</span><span>ARCHIVE 04.11</span></div>
-      <div className="lock-center">
-        <div className="orbit orbit-one" /><div className="orbit orbit-two" />
-        <span className="eyebrow">THE MIDNIGHT ARCHIVE</span>
-        <div className="lock-clock">{new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
-        <div className="lock-date">{date.toUpperCase()}</div>
-        <ClockStrip />
-        <div className="countdown-card">
-          <span>{birthdayStarted ? 'THE ARCHIVE IS LIVE' : 'COUNTDOWN TO HER DAY'}</span>
-          <strong>{birthdayStarted ? '00 : 00 : 00' : `${String(remaining.days).padStart(2, '0')} : ${String(remaining.hours).padStart(2, '0')} : ${String(remaining.mins).padStart(2, '0')}`}</strong>
-          {!birthdayStarted && <small>{String(remaining.secs).padStart(2, '0')} seconds remaining</small>}
+    <section className="opening">
+      <div className="opening-noise" />
+      <div className="opening-orbit orbit-a" /><div className="opening-orbit orbit-b" />
+      <div className="opening-content">
+        <span className="eyebrow">{habeebaData.opening.kicker}</span>
+        <h1>{habeebaData.opening.headline}<em>{habeebaData.opening.subheadline}</em></h1>
+        <p>{habeebaData.opening.message}</p>
+        <div className="opening-status">
+          <Sparkles size={16} />
+          <span>{birthdayStarted ? 'HER BIRTHDAY IS LIVE' : `THE CELEBRATION OPENS IN ${time.days}D ${time.hours}H ${time.minutes}M`}</span>
         </div>
+        <button className="enter-button" onClick={onEnter}><span>ENTER HER WORLD</span><ArrowRight size={18} /></button>
       </div>
-      <div className="lock-bottom">
-        <button className="unlock-button" onClick={onUnlock}><span>Swipe / tap to unlock</span><Unlock size={17} /></button>
-        {!preview && <button className="preview-link" onClick={onPreview}>Preview mode · enter the archive now</button>}
-      </div>
-    </div>
+      <div className="opening-flowers"><span>✦</span><span>✹</span><span>♡</span><span>✦</span></div>
+      <div className="opening-scroll"><ArrowDown size={16} /> a celebration made for Habeeba</div>
+    </section>
   )
 }
 
-function StatusBar({ now, onShade }: { now: number; onShade: () => void }) {
-  return <header className="status-bar" onClick={onShade}><span>{new Date(now).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}</span><span className="status-title">HABEEBA // OS</span><span className="status-icons"><Volume2 size={13} /><BatteryCharging size={14} /></span></header>
+function TopNav() {
+  return <header className="top-nav"><a className="brand" href="#top"><span>H</span> HABEEBA'S WORLD</a><nav><a href="#world">Her world</a><a href="#gallery">Gallery</a><a href="#surprises">Surprises</a><a href="#letter">Letter</a></nav><span className="nav-date">04 / 11</span></header>
 }
 
-function ClockStrip() {
-  return <div className="clock-strip" aria-label="Current India and London times"><span><strong>INDIA</strong><b>{formatClock('Asia/Kolkata')}</b></span><i /><span><strong>LONDON</strong><b>{formatClock('Europe/London')}</b></span></div>
-}
-
-function Launcher({ remaining, birthdayStarted, opened, onOpen, onManager }: { remaining: ReturnType<typeof formatTime>; birthdayStarted: boolean; opened: AppId[]; onOpen: (id: AppId) => void; onManager: () => void }) {
+function Hero({ birthdayStarted, time, onCake }: { birthdayStarted: boolean; time: ReturnType<typeof countdown>; onCake: () => void }) {
   return (
-    <div className="launcher">
-      <section className="launcher-hero">
-        <div className="eyebrow">WEDNESDAY // 04 NOVEMBER 2026</div>
-        <h1>Good evening,<br /><em>Habeeba.</em></h1>
-        <p>{birthdayStarted ? 'The archive has opened. Everything here is yours.' : 'A small universe is waiting behind the midnight signal.'}</p>
-        <div className="mini-countdown"><Clock3 size={15} /> {birthdayStarted ? 'LIVE NOW' : `${remaining.days}d ${remaining.hours}h ${remaining.mins}m until midnight`}</div>
-        <ClockStrip />
-      </section>
-      <section className="app-grid">
-        {apps.map((app) => <AppIcon key={app.id} app={app} opened={opened.includes(app.id)} onOpen={onOpen} />)}
-      </section>
-      <section className="launcher-footer">
-        <div><span className="eyebrow">SYSTEM NOTE</span><p>Five rooms. No rush. Come back whenever you need them.</p></div>
-        <button className="round-button" onClick={onManager} aria-label="Open app manager"><Menu size={19} /></button>
-      </section>
-    </div>
+    <section className="hero section-wrap" id="top">
+      <div className="hero-copy"><span className="eyebrow orange">THE STAR OF THE DAY</span><h2>Today, the<br /><em>world is hers.</em></h2><p>{birthdayStarted ? 'The candles are lit, the confetti is in the air and this entire little universe is here to celebrate Habeeba.' : 'A bright little universe is waiting for Habeeba. Come in, make a wish and celebrate every beautiful thing she is.'}</p><button className="outline-button" onClick={onCake}>Find the surprises <ArrowDown size={16} /></button></div>
+      <div className="hero-portrait"><div className="portrait-halo" /><div className="portrait-placeholder"><Camera size={28} /><span>ADD HER PHOTO<br /><small>optional · habeebaData.ts</small></span></div><div className="hero-sticker sticker-star">✦</div><div className="hero-sticker sticker-heart">♡</div><div className="hero-sticker sticker-tada"><PartyPopper size={22} /></div></div>
+      <div className="hero-bottom"><span>SCROLL TO CELEBRATE</span><div className="hero-line" /><span>01 — 06</span></div>
+    </section>
   )
 }
 
-function AppIcon({ app, opened, onOpen }: { app: (typeof apps)[number]; opened: boolean; onOpen: (id: AppId) => void }) {
-  const Icon = app.icon
-  return <button className={`app-icon tone-${app.tone}`} onClick={() => onOpen(app.id)}><span className="app-icon-mark"><Icon size={24} strokeWidth={1.6} /></span><strong>{app.label}</strong><small>{opened ? 'recently visited' : app.caption}</small></button>
+function WorldSection() {
+  return <section className="world-section section-wrap" id="world"><div className="section-heading"><span className="eyebrow orange">02 / HER BEAUTIFUL WORLD</span><h2>{habeebaData.world.intro}</h2><div className="heading-sparkle">✹</div></div><div className="world-grid"><div className="world-story">{habeebaData.world.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}<div className="favourite-list">{habeebaData.world.favourites.map((favourite, index) => <span key={favourite}><b>0{index + 1}</b>{favourite}</span>)}</div></div><div className="compliment-stack">{habeebaData.world.compliments.map((item) => <article className="compliment" key={item.label}><span className="compliment-icon">{item.icon}</span><div><span className="eyebrow">{item.label}</span><h3>{item.text}</h3></div></article>)}</div></div></section>
 }
 
-function NavigationDock({ activeApp, onHome, onManager, onShade }: { activeApp: AppId | null; onHome: () => void; onManager: () => void; onShade: () => void }) {
-  return <nav className="nav-dock"><button onClick={onShade} aria-label="Notifications"><Bell size={18} /></button><button className={activeApp === null ? 'selected' : ''} onClick={onHome} aria-label="Home"><Home size={18} /></button><button onClick={onManager} aria-label="App manager"><Menu size={18} /></button></nav>
+function Gallery({ onSelect }: { onSelect: (photo: Photo) => void }) {
+  return <section className="gallery-section section-wrap" id="gallery"><div className="section-heading centered"><span className="eyebrow coral">03 / A GALLERY OF HER</span><h2>Little snapshots<br /><em>of wonderful.</em></h2><p>Add the photographs that make you smile first.</p></div><div className="gallery-grid">{habeebaData.photos.map((photo, index) => <button className={`photo-frame photo-${index + 1} ${photo.tone}`} key={photo.id} onClick={() => onSelect(photo)}>{photo.src ? <img src={photo.src} alt={photo.alt} /> : <div className="photo-empty"><ImageOff size={20} /><span>ADD PHOTO {String(index + 1).padStart(2, '0')}</span></div>}<span className="photo-caption">{photo.caption}</span></button>)}</div></section>
 }
 
-function NotificationShade({ remaining, onClose, onOpen, onReset, preview }: { remaining: ReturnType<typeof formatTime>; onClose: () => void; onOpen: (id: AppId) => void; onReset: () => void; preview: boolean }) {
-  return <div className="overlay shade-overlay"><div className="shade-panel"><div className="panel-handle" /><div className="panel-head"><div><span className="eyebrow">NOTIFICATION SHADE</span><h2>Good evening.</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div><div className="quick-grid"><div><Moon size={16} /><span>Midnight mode</span><small>on</small></div><div><Headphones size={16} /><span>Audio ready</span><small>tap to play</small></div><div><Sparkles size={16} /><span>{preview ? 'Preview mode' : 'Birthday lock'}</span><small>{preview ? 'enabled' : 'active'}</small></div></div><div className="shade-note"><span className="eyebrow">NEXT SIGNAL</span><strong>{remaining.days} days, {remaining.hours} hours</strong><p>Distance FM will be waiting when the moment arrives.</p></div><div className="shade-actions"><button onClick={() => onOpen('distance')}><Radio size={16} /> Open Distance FM <ChevronRight size={16} /></button><button className="danger-action" onClick={onReset}><RotateCcw size={16} /> Reset local progress</button></div></div></div>
+function SurpriseSection({ cakeLit, cakeComplete, surprises, onCake, onSurprise }: { cakeLit: boolean; cakeComplete: boolean; surprises: string[]; onCake: () => void; onSurprise: (surprise: Surprise) => void }) {
+  return <section className="surprise-section section-wrap" id="surprises"><div className="section-heading"><span className="eyebrow gold">04 / BIRTHDAY SURPRISES</span><h2>Make a wish.<br /><em>Then make another.</em></h2><p>Tap the candles, then open the little secrets waiting around the party.</p></div><div className="cake-stage"><div className="cake-sparkles">✦　✧　✦</div><div className={`cake ${cakeComplete ? 'celebrated' : ''}`} onClick={onCake}><div className="flame-row">{[0, 1, 2].map((candle) => <span className={`candle ${cakeLit ? '' : 'out'}`} key={candle}><i /></span>)}</div><div className="icing">HABEEBA</div><div className="cake-layer layer-top" /><div className="cake-layer layer-bottom" /><div className="cake-plate" /></div><button className="cake-action" onClick={onCake}>{cakeComplete ? <><Check size={17} /> WISH MADE</> : <><CakeSlice size={17} /> {cakeLit ? 'TAP TO BLOW OUT THE CANDLES' : 'MAKE A WISH'}</>}</button></div><div className="surprise-boxes">{habeebaData.surprises.map((surprise) => <button className={`surprise-box ${surprise.color}`} key={surprise.id} onClick={() => onSurprise(surprise)}><span className="box-lid"><Gift size={20} /></span><span className="eyebrow">{surprise.label}</span><strong>{surprises.includes(surprise.id) ? 'opened ✦' : 'open the box'}</strong></button>)}</div></section>
 }
 
-function AppManager({ opened, activeApp, onClose, onOpen, onReset }: { opened: AppId[]; activeApp: AppId | null; onClose: () => void; onOpen: (id: AppId) => void; onReset: () => void }) {
-  return <div className="overlay manager-overlay"><div className="manager-panel"><div className="panel-head"><div><span className="eyebrow">APP MANAGER</span><h2>Open rooms</h2></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div>{opened.length ? <div className="manager-list">{opened.map((id) => { const app = apps.find((item) => item.id === id)!; const Icon = app.icon; return <button key={id} onClick={() => onOpen(id)}><span className={`manager-icon tone-${app.tone}`}><Icon size={18} /></span><span><strong>{app.label}</strong><small>{activeApp === id ? 'currently open' : 'resume where you left off'}</small></span><ChevronRight size={16} /></button> })}</div> : <div className="empty-state"><CircleHelp size={24} /><p>Your recently opened rooms will appear here.</p></div>}<button className="text-button" onClick={onReset}>Reset local progress</button></div></div>
+function WishesSection() {
+  return <section className="wishes-section section-wrap"><div className="wishes-burst">✹</div><div className="section-heading centered"><span className="eyebrow pink">05 / A WORLD OF WISHES</span><h2>For her next<br /><em>beautiful chapter.</em></h2></div><div className="wish-list">{habeebaData.wishes.map((wish, index) => <div className="wish" key={wish}><span>0{index + 1}</span><p>{wish}</p><Sparkles size={18} /></div>)}</div></section>
 }
 
-function AppWindow({ appId, state, remaining, onBack, onRead, onCapsuleStep, volume, onVolume, notify, vaultDraft, onVaultDraft }: { appId: AppId; state: PersistedState; remaining: ReturnType<typeof formatTime>; onBack: () => void; onRead: (id: string) => void; onCapsuleStep: (step: number) => void; volume: number; onVolume: (volume: number) => void; notify: (message: string) => void; vaultDraft: string; onVaultDraft: (value: string) => void }) {
-  const app = apps.find((item) => item.id === appId)!
-  const Icon = app.icon
-  return <div className={`app-window app-${appId}`}><div className="app-header"><button className="back-button" onClick={onBack}><ArrowLeft size={17} /></button><div><span className="eyebrow">{app.caption}</span><h2>{app.label}</h2></div><span className={`app-header-icon tone-${app.tone}`}><Icon size={18} /></span></div>{appId === 'distance' && <DistanceFM complete={state.readItems.includes('distance')} remaining={remaining} volume={volume} onVolume={onVolume} onRead={onRead} notify={notify} />}{appId === 'transmission' && <Transmission read={state.readItems.includes('transmission')} volume={volume} onVolume={onVolume} onRead={onRead} notify={notify} />}{appId === 'constellation' && <Constellation readItems={state.readItems} onRead={onRead} />}{appId === 'vault' && <Vault readItems={state.readItems} draft={vaultDraft} onDraft={onVaultDraft} onRead={onRead} />}{appId === 'capsule' && <TimeCapsule step={state.capsuleStep} readItems={state.readItems} onStep={onCapsuleStep} onRead={onRead} />}</div>
-}
-
-function DistanceFM({ complete, remaining, volume, onVolume, onRead, notify }: { complete: boolean; remaining: ReturnType<typeof formatTime>; volume: number; onVolume: (volume: number) => void; onRead: (id: string) => void; notify: (message: string) => void }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
+function LetterSection() {
   const [playing, setPlaying] = useState(false)
-  const [audioError, setAudioError] = useState(false)
-  const toggle = async () => {
-    if (!audioRef.current) return
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const toggleAudio = async () => {
+    if (!audioRef.current || !habeebaData.optionalAudio.src) return
     if (playing) {
       audioRef.current.pause()
       setPlaying(false)
       return
     }
-    onRead('distance')
-    try {
-      await audioRef.current.play()
-      setPlaying(true)
-    } catch {
-      setAudioError(true)
-      notify('Add a local audio file in habeebaData.ts to enable playback')
-    }
+    try { await audioRef.current.play(); setPlaying(true) } catch { setPlaying(false) }
   }
-  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume }, [volume])
-  return <div className="app-body distance-body"><audio ref={audioRef} src={habeebaData.audio.distanceFm.src || undefined} onEnded={() => setPlaying(false)} onError={() => setAudioError(true)} /><div className="signal-visual"><div className={`record ${playing ? 'spinning' : ''}`}><Disc3 size={72} strokeWidth={1} /><span>FM</span></div><div className="signal-lines"><i /><i /><i /><i /><i /></div></div><span className="eyebrow">LIVE FROM SOMEWHERE CLOSE</span><h1>A song for the<br /><em>distance between us.</em></h1><p className="app-copy">Tune the private frequency. Playback only begins after you press play.</p><div className="player-controls"><button className={`play-button ${complete ? 'done' : ''}`} onClick={toggle} aria-label={playing ? 'Pause Distance FM' : 'Play Distance FM'}>{playing ? <Pause size={22} /> : complete ? <Sparkles size={21} /> : <Play size={22} fill="currentColor" />}</button><div><strong>{playing ? 'Now transmitting' : complete ? 'Signal acknowledged' : audioError || !habeebaData.audio.distanceFm.src ? 'Signal waiting' : 'Ready when you are'}</strong><small>{audioError || !habeebaData.audio.distanceFm.src ? 'Optional audio · edit habeebaData.ts' : 'Distance FM · private channel'}</small></div></div><label className="volume-control"><Volume2 size={15} /><input aria-label="Distance FM volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => onVolume(Number(event.target.value))} /><span>{Math.round(volume * 100)}%</span></label><div className="app-footnote"><Clock3 size={14} /> {remaining.days ? `The birthday signal arrives in ${remaining.days} days.` : 'The birthday signal is live.'}</div></div>
+  return <section className="letter-section section-wrap" id="letter"><div className="letter-intro"><span className="eyebrow orange">06 / HER BIRTHDAY LETTER</span><h2>Words for<br /><em>Habeeba.</em></h2><div className="letter-mark">♡</div></div><article className="letter-paper"><div className="paper-top"><span>04 — 11 — 2026</span><Heart size={17} /></div><h3>{habeebaData.letter.salutation}</h3>{habeebaData.letter.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}<p className="letter-signoff">{habeebaData.letter.signoff}<br /><em>{habeebaData.letter.signature}</em></p><div className="paper-seal">H</div></article><audio ref={audioRef} src={habeebaData.optionalAudio.src || undefined} onEnded={() => setPlaying(false)} /><button className="voice-note" onClick={toggleAudio}><span className="voice-icon">{playing ? <Volume2 size={16} /> : <Play size={16} fill="currentColor" />}</span><span><strong>{playing ? 'Playing her birthday note' : 'Optional birthday voice note'}</strong><small>{habeebaData.optionalAudio.src ? 'tap to listen' : 'add audio in habeebaData.ts'}</small></span></button></section>
 }
 
-function Transmission({ read, volume, onVolume, onRead, notify }: { read: boolean; volume: number; onVolume: (volume: number) => void; onRead: (id: string) => void; notify: (message: string) => void }) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [playing, setPlaying] = useState(false)
-  const [error, setError] = useState(false)
-  const toggle = async () => {
-    if (!audioRef.current) return
-    if (playing) {
-      audioRef.current.pause()
-      setPlaying(false)
-      return
+function Footer() {
+  return <footer className="world-footer"><Sparkles size={18} /><p>Made with colour, confetti and a very large amount of birthday love for <strong>{habeebaData.name}</strong>.</p><Sparkles size={18} /></footer>
+}
+
+function PhotoLightbox({ photo, onClose }: { photo: Photo; onClose: () => void }) {
+  return <div className="modal-backdrop" onClick={onClose}><div className={`photo-modal ${photo.tone}`} onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={18} /></button>{photo.src ? <img src={photo.src} alt={photo.alt} /> : <div className="photo-modal-empty"><ImageOff size={28} /><p>Add this photo in <code>habeebaData.ts</code>.</p></div>}<p>{photo.caption}</p></div></div>
+}
+
+function SurpriseModal({ surprise, onClose }: { surprise: Surprise; onClose: () => void }) {
+  return <div className="modal-backdrop" onClick={onClose}><div className={`surprise-modal ${surprise.color}`} onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={18} /></button><div className="modal-gift"><Gift size={30} /></div><span className="eyebrow">A SECRET FOR HABEEBA</span><h2>{surprise.title}</h2><p>{surprise.message}</p><button className="modal-done" onClick={onClose}>Keep this wish close <Heart size={15} /></button></div></div>
+}
+
+function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || reducedMotion) return
+    const context = canvas.getContext('2d')
+    if (!context) return
+    let frame = 0
+    let animation = 0
+    let width = 0
+    let height = 0
+    const bursts: { x: number; y: number; age: number; color: string }[] = []
+    const resize = () => {
+      width = canvas.width = window.innerWidth * window.devicePixelRatio
+      height = canvas.height = window.innerHeight * window.devicePixelRatio
+      canvas.style.width = `${window.innerWidth}px`
+      canvas.style.height = `${window.innerHeight}px`
+      context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
+      width = window.innerWidth
+      height = window.innerHeight
     }
-    try {
-      await audioRef.current.play()
-      setPlaying(true)
-      onRead('transmission')
-    } catch {
-      setError(true)
-      notify('No recording yet — add the voice note path in habeebaData.ts')
+    const colors = ['#ff7438', '#ffb52e', '#f78fb3', '#f15b4e', '#ffd86b']
+    const draw = () => {
+      frame += 1
+      context.fillStyle = active ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.22)'
+      context.clearRect(0, 0, width, height)
+      if (frame % (active ? 42 : 75) === 0) bursts.push({ x: Math.random() * width, y: 80 + Math.random() * height * .42, age: 0, color: colors[Math.floor(Math.random() * colors.length)] })
+      bursts.forEach((burst) => {
+        burst.age += 1
+        context.globalAlpha = Math.max(0, 1 - burst.age / 70)
+        for (let i = 0; i < 22; i += 1) {
+          const angle = (Math.PI * 2 * i) / 22
+          const distance = burst.age * (1.2 + (i % 3) * .17)
+          context.fillStyle = burst.color
+          context.fillRect(burst.x + Math.cos(angle) * distance, burst.y + Math.sin(angle) * distance, 2, 2)
+        }
+      })
+      context.globalAlpha = 1
+      for (let i = 0; i < 35; i += 1) {
+        const x = (i * 97 + frame * .18) % width
+        const y = (i * 47 + frame * .08) % (height * .8)
+        context.fillStyle = colors[i % colors.length]
+        context.fillRect(x, y, 2, 2)
+      }
+      animation = window.requestAnimationFrame(draw)
     }
-  }
-  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume }, [volume])
-  return <div className="app-body transmission-body"><audio ref={audioRef} src={habeebaData.audio.transmission.src || undefined} onEnded={() => setPlaying(false)} onError={() => setError(true)} /><div className="message-hero"><div className={`message-orb ${playing ? 'speaking' : ''}`}><Headphones size={34} /></div><div><span className="eyebrow">VOICE CHANNEL // OPTIONAL</span><h3>{playing ? 'A voice from the archive' : 'A message, in your voice.'}</h3><p>{error || !habeebaData.audio.transmission.src ? 'No recording attached yet. The written letter below is always available.' : 'Press play when you are ready.'}</p></div></div><div className="letter-card"><div className="letter-stamp"><Sparkles size={18} /><span>04<br />11</span></div><span className="eyebrow">{habeebaData.transmission.eyebrow}</span><h1>{habeebaData.transmission.title}</h1>{habeebaData.transmission.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}<div className="letter-signature">{habeebaData.transmission.signature}</div></div><div className="voice-controls"><button className="voice-play" onClick={toggle} aria-label={playing ? 'Pause voice message' : 'Play voice message'}>{playing ? <Pause size={19} /> : <Play size={19} fill="currentColor" />}</button><div><strong>{playing ? 'Playing voice note' : 'Play voice note'}</strong><small>{habeebaData.audio.transmission.src ? 'Tap to hear the recording' : 'Optional · no recording attached'}</small></div><Volume2 size={15} /><input aria-label="Voice note volume" type="range" min="0" max="1" step="0.05" value={volume} onChange={(event) => onVolume(Number(event.target.value))} /></div><button className={`complete-button ${read ? 'complete' : ''}`} onClick={() => { onRead('transmission'); notify('Transmission saved as read') }}>{read ? 'Transmission archived ✓' : 'Mark transmission as read'}</button></div>
-}
-
-function Constellation({ readItems, onRead }: { readItems: string[]; onRead: (id: string) => void }) {
-  const [selected, setSelected] = useState<DataItem | null>(null)
-  return <div className="app-body constellation-body"><p className="app-copy">Four stars in her orbit. Tap one to bring it closer.</p><div className="star-map">{habeebaData.constellation.map((item, index) => <button key={item.id} className={`star-node node-${index + 1} ${readItems.includes(item.id) ? 'visited' : ''}`} onClick={() => { setSelected(item); onRead(item.id) }}><span className="star-glow"><Star size={index === 0 ? 24 : 17} fill="currentColor" /></span><small>{item.title}</small></button>)}</div>{selected ? <div className="reveal-card"><span className="eyebrow">{selected.meta}</span><h3>{selected.title}</h3><p>{selected.body}</p><button className="text-button" onClick={() => setSelected(null)}>Return to the map</button></div> : <div className="map-hint"><Sparkles size={16} /> {readItems.filter((id) => habeebaData.constellation.some((item) => item.id === id)).length}/4 stars discovered</div>}</div>
-}
-
-function Vault({ readItems, draft, onDraft, onRead }: { readItems: string[]; draft: string; onDraft: (value: string) => void; onRead: (id: string) => void }) {
-  const [selected, setSelected] = useState<DataItem | null>(null)
-  const isLetter = selected?.id === 'note-1'
-  return <div className="app-body vault-body"><div className="vault-intro"><LockKeyhole size={22} /><div><span className="eyebrow">SECURE DIRECTORY</span><p>Your editable birthday letter lives in file 01.</p></div></div><div className="vault-list">{habeebaData.vault.map((item) => <button key={item.id} className="vault-file" onClick={() => { setSelected(item); onRead(item.id) }}><span className="file-number">{item.id.slice(-1).padStart(2, '0')}</span><span><small>{item.meta}</small><strong>{item.title}</strong></span>{item.id === 'note-1' ? <Edit3 size={16} /> : <ChevronRight size={17} />}</button>)}</div>{selected && <div className="vault-modal"><div className={`vault-paper ${isLetter ? 'editable-paper' : ''}`}><button className="icon-button" onClick={() => setSelected(null)}><X size={17} /></button><span className="eyebrow">{selected.meta}</span><h3>{selected.title}</h3>{isLetter ? <><textarea aria-label="Editable birthday letter" value={draft} onChange={(event) => onDraft(event.target.value)} placeholder="Write the birthday letter here..." /><button className="save-letter" onClick={() => setSelected(null)}><Save size={15} /> Save letter</button></> : <p>{selected.body}</p>}<div className="vault-seal"><LockKeyhole size={15} /> 0411 / PRIVATE</div></div></div>}<div className="app-footnote"><LockKeyhole size={14} /> {readItems.filter((id) => habeebaData.vault.some((item) => item.id === id)).length} of 3 files opened</div></div>
-}
-
-function TimeCapsule({ step, readItems, onStep, onRead }: { step: number; readItems: string[]; onStep: (step: number) => void; onRead: (id: string) => void }) {
-  const current = habeebaData.capsule[step]
-  const opened = readItems.includes(current.id)
-  return <div className="app-body capsule-body"><div className="capsule-orbit"><div className="capsule-core"><TimerReset size={30} /><span>{String(step + 1).padStart(2, '0')}</span></div></div><span className="eyebrow">{current.meta}</span><h1>{current.title}</h1><p className="capsule-copy">{current.body}</p><button className="open-capsule" onClick={() => onRead(current.id)}><BookHeart size={17} /> {opened ? 'Capsule opened ✓' : 'Open this capsule'}</button><div className="capsule-nav"><button disabled={step === 0} onClick={() => onStep(step - 1)}>Previous</button><div>{habeebaData.capsule.map((item, index) => <button aria-label={`Go to capsule ${index + 1}`} className={index === step ? 'active' : ''} key={item.id} onClick={() => onStep(index)} />)}</div><button disabled={step === habeebaData.capsule.length - 1} onClick={() => onStep(step + 1)}>Next</button></div></div>
+    resize()
+    window.addEventListener('resize', resize)
+    animation = window.requestAnimationFrame(draw)
+    return () => { window.cancelAnimationFrame(animation); window.removeEventListener('resize', resize) }
+  }, [active, reducedMotion])
+  return <canvas className={`fireworks ${active ? 'celebration-fireworks' : ''}`} ref={canvasRef} aria-hidden="true" />
 }
