@@ -85,4 +85,21 @@ export const habeebaData = {
     src: '',
     label: 'Optional birthday voice note',
   },
+  finale: {
+    mimi: {
+      name: 'Mimi the Kitty',
+      src: '/images/mimi.png',
+      alt: 'Reference image of Mimi the Kitty',
+      bubble: 'Hi Habeeba! 💗',
+    },
+    puppy: {
+      name: 'Puppy',
+      src: '/images/puppy.png',
+      alt: 'Reference image of Puppy',
+      bubble: 'Yay, it is your day! 🎂',
+    },
+    referenceSheet: '/images/mimi-puppy-reference.png',
+    speech: 'HAPPY BIRTHDAY HABEEBA!! 🎂💗',
+    spokenWish: 'Happy birthday, Habeeba! We hope your day is filled with happiness, laughter, beautiful surprises and lots and lots of love! We love celebrating you!',
+  },
 }

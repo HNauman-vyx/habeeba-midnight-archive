@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import {
   ArrowDown,
   ArrowRight,
@@ -55,7 +56,7 @@ export function App() {
   const [activePhoto, setActivePhoto] = useState<Photo | null>(null)
   const [activeSurprise, setActiveSurprise] = useState<Surprise | null>(null)
   const [cakeLit, setCakeLit] = useState(true)
-  const [celebrating, setCelebrating] = useState(false)
+  const [heartBurst, setHeartBurst] = useState(0)
   const [reducedMotion, setReducedMotion] = useState(false)
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)), [progress])
@@ -77,12 +78,12 @@ export function App() {
   const completeCake = () => {
     if (progress.cakeComplete) return
     setCakeLit(false)
-    setCelebrating(true)
+    setHeartBurst((count) => count + 1)
     setProgress((current) => ({ ...current, cakeComplete: true }))
-    window.setTimeout(() => setCelebrating(false), 4200)
   }
   const openSurprise = (surprise: Surprise) => {
     setActiveSurprise(surprise)
+    setHeartBurst((count) => count + 1)
     setProgress((current) => current.surprises.includes(surprise.id) ? current : { ...current, surprises: [...current.surprises, surprise.id] })
   }
 
@@ -95,18 +96,20 @@ export function App() {
         <>
           <TopNav />
           <main>
-            <Hero birthdayStarted={birthdayStarted} time={time} onCake={() => document.getElementById('surprises')?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })} />
+            <Hero birthdayStarted={birthdayStarted} time={time} onCake={() => document.getElementById('surprises')?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })} onHeart={() => setHeartBurst((count) => count + 1)} />
             <WorldSection />
             <Gallery onSelect={setActivePhoto} />
             <SurpriseSection cakeLit={cakeLit} cakeComplete={progress.cakeComplete} surprises={progress.surprises} onCake={completeCake} onSurprise={openSurprise} />
             <WishesSection />
             <LetterSection />
+            <FinaleSection reducedMotion={reducedMotion} onHeart={() => setHeartBurst((count) => count + 1)} />
           </main>
           <Footer />
         </>
       )}
       {activePhoto && <PhotoLightbox photo={activePhoto} onClose={() => setActivePhoto(null)} />}
       {activeSurprise && <SurpriseModal surprise={activeSurprise} onClose={() => setActiveSurprise(null)} />}
+      <CelebrationDetails reducedMotion={reducedMotion} burstKey={heartBurst} />
     </div>
   )
 }
@@ -136,18 +139,18 @@ function TopNav() {
   return <header className="top-nav"><a className="brand" href="#top"><span>H</span> HABEEBA'S WORLD</a><nav><a href="#world">Her world</a><a href="#gallery">Gallery</a><a href="#surprises">Surprises</a><a href="#letter">Letter</a></nav><span className="nav-date">04 / 11</span></header>
 }
 
-function Hero({ birthdayStarted, time, onCake }: { birthdayStarted: boolean; time: ReturnType<typeof countdown>; onCake: () => void }) {
+function Hero({ birthdayStarted, time, onCake, onHeart }: { birthdayStarted: boolean; time: ReturnType<typeof countdown>; onCake: () => void; onHeart: () => void }) {
   return (
     <section className="hero section-wrap" id="top">
       <div className="hero-copy"><span className="eyebrow orange">THE STAR OF THE DAY</span><h2>Today, the<br /><em>world is hers.</em></h2><p>{birthdayStarted ? 'The candles are lit, the confetti is in the air and this entire little universe is here to celebrate Habeeba.' : 'A bright little universe is waiting for Habeeba. Come in, make a wish and celebrate every beautiful thing she is.'}</p><button className="outline-button" onClick={onCake}>Find the surprises <ArrowDown size={16} /></button></div>
-      <div className="hero-portrait"><div className="portrait-halo" /><div className="portrait-placeholder"><Camera size={28} /><span>ADD HER PHOTO<br /><small>optional · habeebaData.ts</small></span></div><div className="hero-sticker sticker-star">✦</div><div className="hero-sticker sticker-heart">♡</div><div className="hero-sticker sticker-tada"><PartyPopper size={22} /></div></div>
+      <div className="hero-portrait"><div className="portrait-halo" /><div className="portrait-placeholder"><Camera size={28} /><span>ADD HER PHOTO<br /><small>optional · habeebaData.ts</small></span></div><div className="hero-sticker sticker-star">✦</div><button className="hero-sticker sticker-heart heart-trigger" onClick={() => { onHeart(); onCake() }} aria-label="Send a heart">♡</button><div className="hero-sticker sticker-tada"><PartyPopper size={22} /></div></div>
       <div className="hero-bottom"><span>SCROLL TO CELEBRATE</span><div className="hero-line" /><span>01 — 06</span></div>
     </section>
   )
 }
 
 function WorldSection() {
-  return <section className="world-section section-wrap" id="world"><div className="section-heading"><span className="eyebrow orange">02 / HER BEAUTIFUL WORLD</span><h2>{habeebaData.world.intro}</h2><div className="heading-sparkle">✹</div></div><div className="world-grid"><div className="world-story">{habeebaData.world.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}<div className="favourite-list">{habeebaData.world.favourites.map((favourite, index) => <span key={favourite}><b>0{index + 1}</b>{favourite}</span>)}</div></div><div className="compliment-stack">{habeebaData.world.compliments.map((item) => <article className="compliment" key={item.label}><span className="compliment-icon">{item.icon}</span><div><span className="eyebrow">{item.label}</span><h3>{item.text}</h3></div></article>)}</div></div></section>
+  return <section className="world-section section-wrap" id="world"><div className="section-heading"><span className="eyebrow orange">02 / HER BEAUTIFUL WORLD</span><h2>{habeebaData.world.intro}<span className="heading-heart">♡</span></h2><div className="heading-sparkle">✹</div></div><div className="world-grid"><div className="world-story">{habeebaData.world.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}<div className="favourite-list">{habeebaData.world.favourites.map((favourite, index) => <span key={favourite}><b>0{index + 1}</b>{favourite}<Heart size={13} /></span>)}</div></div><div className="compliment-stack">{habeebaData.world.compliments.map((item) => <article className="compliment heart-trigger" key={item.label}><span className="compliment-icon">{item.icon}</span><div><span className="eyebrow">{item.label}</span><h3>{item.text}</h3></div></article>)}</div></div></section>
 }
 
 function Gallery({ onSelect }: { onSelect: (photo: Photo) => void }) {
@@ -187,6 +190,40 @@ function PhotoLightbox({ photo, onClose }: { photo: Photo; onClose: () => void }
 
 function SurpriseModal({ surprise, onClose }: { surprise: Surprise; onClose: () => void }) {
   return <div className="modal-backdrop" onClick={onClose}><div className={`surprise-modal ${surprise.color}`} onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={18} /></button><div className="modal-gift"><Gift size={30} /></div><span className="eyebrow">A SECRET FOR HABEEBA</span><h2>{surprise.title}</h2><p>{surprise.message}</p><button className="modal-done" onClick={onClose}>Keep this wish close <Heart size={15} /></button></div></div>
+}
+
+function CelebrationDetails({ reducedMotion, burstKey }: { reducedMotion: boolean; burstKey: number }) {
+  const petals = Array.from({ length: 22 }, (_, index) => index)
+  return <><div className="petal-layer" aria-hidden="true">{!reducedMotion && petals.map((petal) => <span key={petal} className={`petal petal-${petal % 6}`} style={{ '--petal-left': `${(petal * 43) % 103}%`, '--petal-delay': `${(petal % 9) * -1.7}s`, '--petal-duration': `${8 + (petal % 6)}s` } as CSSProperties}>{petal % 4 === 0 ? '✿' : petal % 3 === 0 ? '❀' : '♡'}</span>)}</div><div className={`heart-burst-layer ${burstKey ? 'burst-active' : ''}`} key={burstKey} aria-hidden="true">{burstKey > 0 && Array.from({ length: 16 }, (_, index) => <span key={index} style={{ '--burst-angle': `${index * 22.5}deg`, '--burst-distance': `${55 + (index % 4) * 18}px` } as CSSProperties}>♥</span>)}</div></>
+}
+
+function FinaleSection({ reducedMotion, onHeart }: { reducedMotion: boolean; onHeart: () => void }) {
+  const finaleRef = useRef<HTMLElement>(null)
+  const [visible, setVisible] = useState(false)
+  const [spoken, setSpoken] = useState(false)
+  useEffect(() => {
+    const node = finaleRef.current
+    if (!node) return
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: .35 })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  const speak = () => {
+    if (!('speechSynthesis' in window)) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(habeebaData.finale.spokenWish)
+    utterance.rate = .94
+    utterance.pitch = 1.08
+    utterance.onstart = () => setSpoken(true)
+    utterance.onend = () => setSpoken(false)
+    window.speechSynthesis.speak(utterance)
+    onHeart()
+  }
+  return <section ref={finaleRef} className={`finale-section ${visible ? 'finale-visible' : ''}`} id="finale"><div className="finale-firework finale-firework-a">✹</div><div className="finale-firework finale-firework-b">✦</div><div className="finale-heading"><span className="eyebrow">THE GRAND FINALE</span><h2>One more little<br /><em>surprise.</em></h2></div><div className="character-stage"><Character character={habeebaData.finale.mimi} className="mimi" reducedMotion={reducedMotion} /><div className="finale-speech"><span>{habeebaData.finale.speech}</span><button onClick={speak} className="speech-button">{spoken ? 'OUR WISH IS PLAYING ✦' : 'HEAR OUR BIRTHDAY WISH'}<Volume2 size={16} /></button></div><Character character={habeebaData.finale.puppy} className="puppy" reducedMotion={reducedMotion} /></div><p className="finale-note">Mimi and Puppy are the original pixel-art characters from the uploaded reference image.</p></section>
+}
+
+function Character({ character, className, reducedMotion }: { character: { name: string; src: string; alt: string }; className: string; reducedMotion: boolean }) {
+  return <div className={`character ${className} ${reducedMotion ? 'still' : ''}`}>{character.src ? <img className="pixel-character" src={character.src} alt={character.alt} draggable="false" /> : <div className="character-placeholder"><Camera size={23} /><strong>{character.name}</strong><small>ADD REFERENCE IMAGE</small></div>}<span className="character-bubble">{character.bubble}</span><span className="character-name">{character.name}</span></div>
 }
 
 function Fireworks({ active, reducedMotion }: { active: boolean; reducedMotion: boolean }) {
